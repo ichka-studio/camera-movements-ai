@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mouvements de Caméra — IA Vidéo</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #080a0f;
+    --surface: #0e1118;
+    --border: #1e2535;
+    --accent: #00e5ff;
+    --accent2: #7c3aed;
+    --accent3: #f59e0b;
+    --text: #e8eaf0;
+    --muted: #5a6480;
+    --card: #111520;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Background grid */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  header {
+    position: relative;
+    z-index: 10;
+    padding: 60px 40px 40px;
+    text-align: center;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .logo-row {
+    display: flex;
+    justify-content: center;
+    gap: 14px;
+    margin-bottom: 28px;
+    flex-wrap: wrap;
+  }
+
+  .platform-badge {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    padding: 5px 14px;
+    border-radius: 20px;
+    border: 1px solid;
+    text-transform: uppercase;
+  }
+
+  .badge-kling { color: #00e5ff; border-color: rgba(0,229,255,0.4); background: rgba(0,229,255,0.06); }
+  .badge-veo { color: #4ade80; border-color: rgba(74,222,128,0.4); background: rgba(74,222,128,0.06); }
+  .badge-sora { color: #f59e0b; border-color: rgba(245,158,11,0.4); background: rgba(245,158,11,0.06); }
+  .badge-runway { color: #c084fc; border-color: rgba(192,132,252,0.4); background: rgba(192,132,252,0.06); }
+  .badge-hailuo { color: #fb7185; border-color: rgba(251,113,133,0.4); background: rgba(251,113,133,0.06); }
+
+  h1 {
+    font-size: clamp(2.2rem, 5vw, 4rem);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+    background: linear-gradient(135deg, #fff 0%, var(--accent) 60%, var(--accent2) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 16px;
+  }
+
+  .subtitle {
+    font-family: 'DM Mono', monospace;
+    color: var(--muted);
+    font-size: 13px;
+    letter-spacing: 0.05em;
+  }
+
+  /* Filters */
+  .filters {
+    position: relative;
+    z-index: 10;
+    display: flex;
+    gap: 10px;
+    padding: 28px 40px;
+    overflow-x: auto;
+    border-bottom: 1px solid var(--border);
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .filter-btn {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 8px 18px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .filter-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .filter-btn.active { background: var(--accent); border-color: var(--accent); color: #000; font-weight: 700; }
+
+  /* Grid */
+  .grid {
+    position: relative;
+    z-index: 10;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 1px;
+    background: var(--border);
+    padding: 0;
+  }
+
+  .card {
+    background: var(--card);
+    padding: 28px;
+    cursor: pointer;
+    transition: background 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .card:hover { background: #141824; }
+  .card:hover::before { opacity: 1; }
+
+  .card[data-cat="dolly"] .card-icon { color: #00e5ff; }
+  .card[data-cat="dolly"]::before { background: #00e5ff; }
+  .card[data-cat="pan"] .card-icon { color: #4ade80; }
+  .card[data-cat="pan"]::before { background: #4ade80; }
+  .card[data-cat="tilt"] .card-icon { color: #f59e0b; }
+  .card[data-cat="tilt"]::before { background: #f59e0b; }
+  .card[data-cat="orbit"] .card-icon { color: #c084fc; }
+  .card[data-cat="orbit"]::before { background: #c084fc; }
+  .card[data-cat="zoom"] .card-icon { color: #fb7185; }
+  .card[data-cat="zoom"]::before { background: #fb7185; }
+  .card[data-cat="special"] .card-icon { color: #fbbf24; }
+  .card[data-cat="special"]::before { background: #fbbf24; }
+
+  .card-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 14px;
+    gap: 12px;
+  }
+
+  .card-left { display: flex; align-items: center; gap: 14px; }
+
+  .card-icon {
+    font-size: 28px;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+
+  .card-title {
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    line-height: 1.2;
+  }
+
+  .card-en {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-top: 2px;
+  }
+
+  .card-num {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--border);
+    font-weight: 500;
+    flex-shrink: 0;
+  }
+
+  .card-desc {
+    font-size: 13px;
+    color: #8090b0;
+    line-height: 1.6;
+    margin-bottom: 18px;
+  }
+
+  .prompt-box {
+    background: rgba(0,0,0,0.4);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 16px;
+    position: relative;
+  }
+
+  .prompt-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .prompt-label::before {
+    content: '›';
+    color: var(--accent);
+    font-size: 12px;
+  }
+
+  .prompt-text {
+    font-family: 'DM Mono', monospace;
+    font-size: 11.5px;
+    color: #b8c8e8;
+    line-height: 1.6;
+    font-weight: 400;
+  }
+
+  .prompt-text .keyword {
+    color: var(--accent);
+    font-weight: 500;
+  }
+
+  .copy-btn {
+    position: absolute;
+    top: 10px; right: 10px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .copy-btn:hover { color: var(--accent); border-color: var(--accent); }
+  .copy-btn.copied { color: #4ade80; border-color: #4ade80; }
+
+  .tags {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 14px;
+  }
+
+  .tag {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    background: rgba(255,255,255,0.04);
+    color: var(--muted);
+    border: 1px solid rgba(255,255,255,0.06);
+    letter-spacing: 0.06em;
+  }
+
+  /* Hidden cards */
+  .card.hidden { display: none; }
+
+  footer {
+    position: relative;
+    z-index: 10;
+    text-align: center;
+    padding: 40px;
+    border-top: 1px solid var(--border);
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.06em;
+  }
+
+  .count-bar {
+    position: relative;
+    z-index: 10;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    padding: 16px 40px;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .count-num {
+    color: var(--accent);
+    font-weight: 500;
+  }
+
+  @media (max-width: 600px) {
+    header { padding: 40px 20px 30px; }
+    .filters { padding: 20px; }
+    .grid { grid-template-columns: 1fr; }
+    .card { padding: 22px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-row">
+    <span class="platform-badge badge-kling">Kling 3.0</span>
+    <span class="platform-badge badge-veo">Veo 3</span>
+    <span class="platform-badge badge-sora">Sora</span>
+    <span class="platform-badge badge-runway">Runway Gen-4</span>
+    <span class="platform-badge badge-hailuo">Hailuo</span>
+  </div>
+  <h1>Mouvements de Caméra</h1>
+  <p class="subtitle">// 24 techniques · prompts ready-to-use · AI video</p>
+</header>
+
+<div class="filters">
+  <button class="filter-btn active" onclick="filter('all')">Tous</button>
+  <button class="filter-btn" onclick="filter('dolly')">Dolly / Truck</button>
+  <button class="filter-btn" onclick="filter('pan')">Pan / Rotation</button>
+  <button class="filter-btn" onclick="filter('tilt')">Tilt / Vertical</button>
+  <button class="filter-btn" onclick="filter('orbit')">Orbit / Arc</button>
+  <button class="filter-btn" onclick="filter('zoom')">Zoom</button>
+  <button class="filter-btn" onclick="filter('special')">Spéciaux</button>
+</div>
+
+<div class="count-bar">
+  <span class="count-num" id="count">24</span> mouvements affichés
+</div>
+
+<div class="grid" id="grid"></div>
+
+<footer>Compatible Kling 3.0 · Veo 3 · Sora · Runway Gen-4 · Hailuo · Luma Dream Machine</footer>
+
+<script>
+const movements = [
+  {
+    id: '01', cat: 'dolly', icon: '➡️',
+    fr: 'Dolly Avant', en: 'Dolly In / Push In',
+    desc: 'La caméra avance physiquement vers le sujet, créant un effet d\'immersion progressive. Différent du zoom : la perspective change.',
+    prompt: 'slow dolly in toward the subject, camera physically moving forward, perspective compression, cinematic depth, smooth tracking shot',
+    tags: ['Kling 3.0', 'Veo 3', 'Sora', 'Runway']
+  },
+  {
+    id: '02', cat: 'dolly', icon: '⬅️',
+    fr: 'Dolly Arrière', en: 'Dolly Out / Pull Back',
+    desc: 'La caméra recule pour révéler progressivement l\'environnement autour du sujet. Effet de révélation dramatique.',
+    prompt: 'slow pull back shot, camera retreating from the subject, gradually revealing the surrounding environment, wide reveal, cinematic',
+    tags: ['Kling 3.0', 'Veo 3', 'Runway', 'Hailuo']
+  },
+  {
+    id: '03', cat: 'dolly', icon: '↔️',
+    fr: 'Truck / Travelling Latéral', en: 'Truck / Lateral Tracking',
+    desc: 'La caméra se déplace latéralement, parallèlement au sujet. Idéal pour suivre un personnage en mouvement.',
+    prompt: 'lateral tracking shot, camera moving sideways parallel to the subject, smooth truck right, following motion, depth of field',
+    tags: ['Kling 3.0', 'Veo 3', 'Sora']
+  },
+  {
+    id: '04', cat: 'pan', icon: '🔄',
+    fr: 'Pan Horizontal', en: 'Pan Left / Pan Right',
+    desc: 'La caméra pivote horizontalement sur son axe sans se déplacer. Permet de balayer un paysage ou suivre une action.',
+    prompt: 'smooth pan right, camera rotating horizontally on its axis, sweeping panoramic movement, steady head, no camera movement just rotation',
+    tags: ['Kling 3.0', 'Veo 3', 'Sora', 'Runway', 'Hailuo']
+  },
+  {
+    id: '05', cat: 'pan', icon: '⚡',
+    fr: 'Whip Pan', en: 'Whip Pan / Swish Pan',
+    desc: 'Pan ultra-rapide qui crée un flou de mouvement. Souvent utilisé comme transition entre deux scènes.',
+    prompt: 'fast whip pan to the right, extreme motion blur, rapid camera swipe, kinetic energy, used as a cut transition between scenes',
+    tags: ['Kling 3.0', 'Runway', 'Sora']
+  },
+  {
+    id: '06', cat: 'tilt', icon: '⬆️',
+    fr: 'Tilt Up', en: 'Tilt Up / Looking Up',
+    desc: 'La caméra pivote vers le haut sur son axe. Révèle la hauteur d\'un bâtiment ou d\'un personnage impressionnant.',
+    prompt: 'slow tilt up, camera tilting upward revealing the full height, revealing shot from ground to sky, dramatic vertical reveal',
+    tags: ['Kling 3.0', 'Veo 3', 'Sora', 'Runway']
+  },
+  {
+    id: '07', cat: 'tilt', icon: '⬇️',
+    fr: 'Tilt Down', en: 'Tilt Down / Looking Down',
+    desc: 'La caméra pivote vers le bas. Peut créer un sentiment de vulnérabilité ou révéler un détail au sol.',
+    prompt: 'gentle tilt down, camera tilting downward from horizon to ground level, slow reveal, sense of scale and vulnerability',
+    tags: ['Kling 3.0', 'Veo 3', 'Runway']
+  },
+  {
+    id: '08', cat: 'tilt', icon: '📐',
+    fr: 'Dutch Angle', en: 'Dutch Tilt / Canted Angle',
+    desc: 'La caméra est inclinée latéralement. Crée une tension psychologique, un sentiment de malaise ou de danger.',
+    prompt: 'dutch angle shot, camera tilted at 30 degrees, disorienting canted angle, psychological tension, unease, thriller aesthetic',
+    tags: ['Kling 3.0', 'Veo 3', 'Sora']
+  },
+  {
+    id: '09', cat: 'orbit', icon: '🌀',
+    fr: 'Orbit / Arc Shot', en: 'Orbit / 360° Arc',
+    desc: 'La caméra tourne autour du sujet en maintenant la mise au point. Révèle toutes les facettes du sujet.',
+    prompt: 'orbital camera movement circling the subject 180 degrees, arc shot, subject stays centered, smooth rotation around subject, depth of field',
+    tags: ['Kling 3.0', 'Veo 3', 'Runway', 'Hailuo']
+  },
+  {
+    id: '10', cat: 'orbit', icon: '🌪️',
+    fr: 'Effet Vertigo', en: 'Dolly Zoom / Hitchcock Effect',
+    desc: 'Dolly arrière combiné à un zoom avant simultané. Le sujet reste identique mais le fond se déforme — effet psychologique intense.',
+    prompt: 'dolly zoom effect, simultaneously zoom in while pulling camera back, Hitchcock vertigo effect, background stretching, subject stays same size, unsettling',
+    tags: ['Kling 3.0', 'Veo 3', 'Sora']
+  },
+  {
+    id: '11', cat: 'orbit', icon: '🦅',
+    fr: 'Caméra Haute / Plongée', en: 'High Angle / Bird\'s Eye',
+    desc: 'Vue en plongée du dessus. Peut donner un sentiment d\'écrasement, de vulnérabilité ou une vue cartographique.',
+    prompt: "high angle shot looking down, bird's eye view, overhead camera angle, subject appears small and vulnerable, top-down perspective, cinematic drone",
+    tags: ['Kling 3.0', 'Veo 3', 'Sora', 'Runway']
+  },
+  {
+    id: '12', cat: 'orbit', icon: '🐜',
+    fr: 'Contre-Plongée', en: 'Low Angle / Worm\'s Eye',
+    desc: 'Vue en contre-plongée depuis le bas. Rend le sujet imposant, dominant, héroïque.',
+    prompt: "low angle shot looking up, worm's eye view, camera close to ground, subject looms large and dominant, heroic framing, dramatic sky background",
+    tags: ['Kling 3.0', 'Veo 3', 'Sora', 'Runway', 'Hailuo']
+  },
+  {
+    id: '13', cat: 'zoom', icon: '🔭',
+    fr: 'Zoom Avant', en: 'Zoom In',
+    desc: 'Rapprochement optique vers le sujet sans mouvement de caméra. Réduction de l\'angle de champ.',
+    prompt: 'smooth zoom in, slow optical zoom toward subject, focal length increasing, background compression, subject getting larger, cinematic lens',
+    tags: ['Kling 3.0', 'Veo 3', 'Runway', 'Hailuo']
+  },
+  {
+    id: '14', cat: 'zoom', icon: '🔬',
+    fr: 'Zoom Arrière', en: 'Zoom Out',
+    desc: 'Élargissement du champ visuel. Révèle le contexte autour du sujet, crée une sensation de recul émotionnel.',
+    prompt: 'gradual zoom out, focal length decreasing, wide reveal, pulling back to show more context, expanding field of view, epic scale reveal',
+    tags: ['Kling 3.0', 'Veo 3', 'Sora', 'Runway']
+  },
+  {
+    id: '15', cat: 'zoom', icon: '💫',
+    fr: 'Rack Focus', en: 'Rack Focus / Focus Pull',
+    desc: 'Changement progressif de mise au point d\'un sujet à l\'autre. Redirige l\'attention du spectateur.',
+    prompt: 'rack focus from foreground to background, shallow depth of field, focus pulling between two subjects, bokeh transition, attention redirection',
+    tags: ['Kling 3.0', 'Veo 3', 'Runway']
+  },
+  {
+    id: '16', cat: 'special', icon: '🚁',
+    fr: 'Drone Ascendant', en: 'Aerial Rising Shot',
+    desc: 'La caméra monte verticalement comme un drone. Révèle progressivement le paysage environnant.',
+    prompt: 'aerial rising shot, camera ascending vertically like a drone, slowly revealing the landscape, bird\'s eye view emerging, cinematic aerial footage',
+    tags: ['Kling 3.0', 'Veo 3', 'Sora', 'Runway']
+  },
+  {
+    id: '17', cat: 'special', icon: '🎢',
+    fr: 'Drone Descendant', en: 'Aerial Descending / Dive',
+    desc: 'Plongée verticale vers le bas. Crée une sensation vertigineuse, révèle progressivement les détails.',
+    prompt: 'aerial descending shot, drone diving down from high altitude, rapidly approaching the ground, vertiginous perspective, increasing detail',
+    tags: ['Kling 3.0', 'Veo 3', 'Runway', 'Hailuo']
+  },
+  {
+    id: '18', cat: 'special', icon: '🤸',
+    fr: 'Caméra à l\'Épaule', en: 'Handheld / Shoulder Cam',
+    desc: 'Mouvement légèrement instable simulant une caméra portée à la main. Donne un sentiment de réalisme, d\'urgence.',
+    prompt: 'handheld camera movement, slight natural shake, documentary style, shaky cam, raw and gritty feel, shoulder-mounted camera, realistic wobble',
+    tags: ['Kling 3.0', 'Veo 3', 'Sora', 'Runway', 'Hailuo']
+  },
+  {
+    id: '19', cat: 'dolly', icon: '🚂',
+    fr: 'Travelling Avant Rapide', en: 'Speed Ramp / Fast Dolly',
+    desc: 'Avancée rapide de la caméra vers le sujet avec effet de vitesse. Crée une énergie intense.',
+    prompt: 'fast forward camera rush toward subject, speed ramp effect, rapid dolly in, dramatic approach, motion blur at edges, high energy cinematic move',
+    tags: ['Kling 3.0', 'Runway', 'Sora']
+  },
+  {
+    id: '20', cat: 'special', icon: '🎯',
+    fr: 'Point de Vue Subjectif', en: 'POV / First Person',
+    desc: 'La caméra adopte le point de vue d\'un personnage, comme si on regardait à travers ses yeux.',
+    prompt: 'first person POV shot, camera as the character\'s eyes, natural head movement, immersive perspective, first-person view walking through the scene',
+    tags: ['Kling 3.0', 'Veo 3', 'Sora', 'Hailuo']
+  },
+  {
+    id: '21', cat: 'special', icon: '🌊',
+    fr: 'Steadicam / Glide', en: 'Steadicam / Glide Shot',
+    desc: 'Mouvement fluide et stabilisé en suivant un sujet en mouvement. Contraste : fluide mais dynamique.',
+    prompt: 'steadicam following shot, ultra smooth gliding movement, tracking subject through environment, fluid camera motion, no shake, following through corridors',
+    tags: ['Kling 3.0', 'Veo 3', 'Runway', 'Hailuo']
+  },
+  {
+    id: '22', cat: 'pan', icon: '🔃',
+    fr: 'Pan 360°', en: 'Full 360° Pan',
+    desc: 'Rotation complète autour de l\'axe vertical. Montre l\'environnement complet autour d\'un point fixe.',
+    prompt: 'full 360 degree pan rotation, camera spinning slowly around its vertical axis, revealing the entire environment, immersive panoramic sweep',
+    tags: ['Kling 3.0', 'Veo 3', 'Sora']
+  },
+  {
+    id: '23', cat: 'special', icon: '🕳️',
+    fr: 'Caméra à Travers', en: 'Pass Through / Tunnel Shot',
+    desc: 'La caméra passe à travers un objet, une porte, une fenêtre ou même un personnage. Effet très cinématographique.',
+    prompt: 'camera passes through a narrow opening, tunnel shot through a doorway, camera gliding through solid elements, seamless pass-through transition, magical realism',
+    tags: ['Kling 3.0', 'Veo 3', 'Sora']
+  },
+  {
+    id: '24', cat: 'special', icon: '🌀',
+    fr: 'Rotation sur l\'Axe Z', en: 'Roll / Barrel Roll',
+    desc: 'La caméra tourne sur son propre axe (comme un tonneau). Crée une sensation de vertige ou de désorientation.',
+    prompt: 'camera roll rotation around the Z axis, barrel roll effect, horizon tilting and spinning, disorienting 360 degree roll, psychedelic rotation',
+    tags: ['Kling 3.0', 'Runway', 'Sora', 'Hailuo']
+  }
+];
+
+function highlight(text) {
+  const keywords = ['dolly', 'pan', 'zoom', 'tilt', 'orbit', 'aerial', 'POV', 'handheld', 'steadicam', 'camera', 'shot', 'tracking', 'cinematic'];
+  let result = text;
+  keywords.forEach(k => {
+    result = result.replace(new RegExp(`\\b${k}\\b`, 'gi'), `<span class="keyword">${k}</span>`);
+  });
+  return result;
+}
+
+function renderCards(data) {
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+  data.forEach(m => {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.dataset.cat = m.cat;
+    card.innerHTML = `
+      <div class="card-header">
+        <div class="card-left">
+          <span class="card-icon">${m.icon}</span>
+          <div>
+            <div class="card-title">${m.fr}</div>
+            <div class="card-en">${m.en}</div>
+          </div>
+        </div>
+        <span class="card-num">#${m.id}</span>
+      </div>
+      <p class="card-desc">${m.desc}</p>
+      <div class="prompt-box">
+        <div class="prompt-label">Prompt</div>
+        <div class="prompt-text">${highlight(m.prompt)}</div>
+        <button class="copy-btn" onclick="copyPrompt(this, \`${m.prompt.replace(/`/g, "'")}\`)">COPY</button>
+      </div>
+      <div class="tags">${m.tags.map(t => `<span class="tag">${t}</span>`).join('')}</div>
+    `;
+    grid.appendChild(card);
+  });
+  document.getElementById('count').textContent = data.length;
+}
+
+function filter(cat) {
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  const filtered = cat === 'all' ? movements : movements.filter(m => m.cat === cat);
+  renderCards(filtered);
+}
+
+function copyPrompt(btn, text) {
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = 'COPIED!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'COPY'; btn.classList.remove('copied'); }, 2000);
+  });
+}
+
+renderCards(movements);
+</script>
+</body>
+</html>
